@@ -1,0 +1,13 @@
+# Dependencies (Largen itself has none, but keep this for forks that add some)
+node_modules/
+
+# Local secrets and runtime data
+.env
+.env.local
+data/
+*.log
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
