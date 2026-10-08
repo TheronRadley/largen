@@ -3,17 +3,16 @@
  * `createApp` takes injectable dependencies so tests can run the real HTTP stack with mocks.
  */
 import http from 'node:http';
+import path from 'node:path';
 import { createLLMProvider } from './llm/provider.js';
 import { createSearchProvider } from './search/provider.js';
-import { ResearchPipeline } from './orchestrator/pipeline.js';
+import { ResearchPipeline, ResearchAborted } from './orchestrator/pipeline.js';
 import { ConversationStore } from './store/conversations.js';
 import { RateLimiter } from './utils/rateLimit.js';
 import { publicStatus } from './config.js';
-import path from 'node:path';
 import { toPublicError } from './errors.js';
 import { applySecurityHeaders, openSse, readJsonBody, sendError, sendJson, serveStatic } from './api/http.js';
 import { ID_RE, runChatTurn, validateChatBody } from './api/chat.js';
-import { ResearchAborted } from './orchestrator/pipeline.js';
 
 export async function createApp({ config, logger, llm, search, fetchPage, fetchImpl, now, store: storeOverride } = {}) {
   const resolvedLlm = llm !== undefined ? llm : createLLMProvider(config, { logger, fetchImpl });
