@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Largen · Research assistant</title>
+    <meta name="description" content="Largen searches the web, compares sources, and answers with citations." />
+    <meta name="theme-color" content="#faf9f6" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M10 7v15h12' stroke='%23fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <aside class="sidebar" id="sidebar" aria-label="Conversations">
+        <div class="sidebar-top">
+          <div class="brand">
+            <span class="logo-mark" aria-hidden="true">L</span>
+            <span class="brand-name">Largen</span>
+          </div>
+          <button class="icon-btn" id="close-sidebar" type="button" aria-label="Close sidebar">✕</button>
+        </div>
+        <button class="new-btn" id="new-chat" type="button">+ New research</button>
+        <p class="sidebar-label">Recent</p>
+        <ul class="conv-list" id="conv-list"></ul>
+        <p class="sidebar-empty" id="conv-empty" hidden>Your research will appear here.</p>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <button class="icon-btn" id="open-sidebar" type="button" aria-label="Open sidebar">☰</button>
+          <div class="topbar-title" id="topbar-title"></div>
+          <div class="health" id="health" hidden></div>
+        </header>
+
+        <div class="banner" id="banner" role="status" hidden></div>
+
+        <main class="stage" id="stage">
+          <section class="hero" id="hero">
+            <div class="hero-logo" aria-hidden="true"><span class="logo-mark big">L</span></div>
+            <h1>What do you want to understand?</h1>
+            <p class="hero-sub">Largen plans its research, reads multiple sources, flags disagreements, and cites everything it relies on.</p>
+            <div class="examples" id="examples">
+              <button type="button" class="example">Is creatine useful for strength training?</button>
+              <button type="button" class="example">Compare the best budget laptops for university students in 2026. Consider performance, battery life, price, repairability, and software compatibility.</button>
+              <button type="button" class="example">Is nuclear energy safer than fossil fuels?</button>
+              <button type="button" class="example">What is the capital of Japan?</button>
+            </div>
+          </section>
+
+          <div class="messages" id="messages" aria-live="off"></div>
+        </main>
+
+        <div class="progress" id="progress" role="status" aria-live="polite" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="progress-text">Working…</span>
+        </div>
+
+        <footer class="composer-wrap">
+          <form class="composer" id="composer" autocomplete="off">
+            <label class="sr-only" for="question">Your question</label>
+            <textarea id="question" rows="1" maxlength="2000" placeholder="Ask a question. Largen researches when accuracy matters."></textarea>
+            <div class="composer-bar">
+              <div class="mode-group" role="radiogroup" aria-label="Research depth" id="mode-group">
+                <button type="button" class="mode" role="radio" data-mode="quick" aria-checked="false" title="Fastest. Minimal searching.">Quick</button>
+                <button type="button" class="mode" role="radio" data-mode="research" aria-checked="true" title="Multiple searches and source comparison.">Research</button>
+                <button type="button" class="mode" role="radio" data-mode="deep" aria-checked="false" title="Extensive searching and deeper synthesis. Slower and costs more.">Deep</button>
+              </div>
+              <label class="switch" title="When off, Largen answers from general knowledge without searching the web.">
+                <input type="checkbox" id="web-search" checked />
+                <span class="track" aria-hidden="true"></span>
+                <span>Web search</span>
+              </label>
+              <span class="grow"></span>
+              <span class="char-count" id="char-count" aria-hidden="true"></span>
+              <button type="submit" class="send" id="send" aria-label="Send question" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </form>
+          <p class="fineprint">Largen can make mistakes. For medical, legal, or financial decisions, check the cited sources and consider a professional.</p>
+        </footer>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
