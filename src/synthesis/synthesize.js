@@ -46,7 +46,7 @@ export function buildEvidenceBlock(sources, { maxChars = 12_000, maxPassageChars
   return { block: parts.join('\n\n'), included };
 }
 
-function buildSynthesisPrompt({ question, plan, assessment, conflicts, evidenceBlock, history }) {
+function buildSynthesisPrompt({ question, plan, assessment, conflicts, evidenceGraph, evidenceBlock, history }) {
   const lines = [];
   const historyText = formatHistory(history);
   if (historyText) lines.push(`Conversation context (for resolving references only; not sources):\n${historyText}`);
@@ -60,6 +60,7 @@ function buildSynthesisPrompt({ question, plan, assessment, conflicts, evidenceB
   if (conflicts.length) {
     lines.push(`Detected disagreements between sources (explain these; do not hide them):\n${conflicts.map((c) => `- ${c.explanation}`).join('\n')}`);
   }
+  if (evidenceGraph) lines.push(`Claim evidence graph (model-assessed, not proof of truth):\n${JSON.stringify(evidenceGraph)}`);
   lines.push(`Sources:\n\n${evidenceBlock}`);
   return lines.join('\n\n');
 }
@@ -67,14 +68,14 @@ function buildSynthesisPrompt({ question, plan, assessment, conflicts, evidenceB
 /**
  * Writes the answer from the evidence. Returns { answer, claims, limitations, structured }.
  */
-export async function synthesizeWithSources({ llm, question, plan, assessment, conflicts = [], sources, history = [], config, logger }) {
+export async function synthesizeWithSources({ llm, question, plan, assessment, conflicts = [], evidenceGraph, sources, history = [], config, logger }) {
   // Syndicated copies repeat an original source; the model should only see the original.
   const independent = sources.filter((s) => !s.syndicatedFrom);
   const { block, included } = buildEvidenceBlock(independent, {
     maxChars: config.research.maxEvidenceChars,
     maxPassageChars: config.research.maxPassageChars,
   });
-  const prompt = buildSynthesisPrompt({ question, plan, assessment, conflicts, evidenceBlock: block, history });
+  const prompt = buildSynthesisPrompt({ question, plan, assessment, conflicts, evidenceGraph, evidenceBlock: block, history });
   logger?.debug('Synthesis prompt built', { sources: included.length, promptChars: prompt.length });
 
   const res = await llm.complete({

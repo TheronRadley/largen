@@ -58,6 +58,7 @@ export function formatAnswer({ markdown, claims = [], sources }) {
   const formattedClaims = claims.map((c) => ({
     text: c.text,
     type: c.type,
+    ...(c.verification ? { verification: c.verification, supported: c.supported, confidence: c.confidence, conflicted: c.conflicted } : {}),
     citations: c.sources.filter((id) => numberFor.has(id)).map((id) => numberFor.get(id)),
   }));
 

@@ -16,7 +16,7 @@ const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
  * @param {Array<{text: string, sources: string[], type: string}>} [input.claims]
  * @param {number} [input.now]
  */
-export function assessEvidence({ sources, conflicts = [], requiresCurrent = false, claims = [], now = Date.now() }) {
+export function assessEvidence({ sources, conflicts = [], requiresCurrent = false, claims = [], evidenceGraph, now = Date.now() }) {
   const byId = new Map(sources.map((s) => [s.id, s]));
   const readable = sources.filter((s) => s.evidenceLevel === 'page');
   const independent = readable.filter((s) => !s.syndicatedFrom);
@@ -56,7 +56,34 @@ export function assessEvidence({ sources, conflicts = [], requiresCurrent = fals
     }
   }
 
-  const assessedClaims = claims.map((c) => assessClaim(c, byId, conflicts));
+  if (evidenceGraph) {
+    const incomplete = evidenceGraph.status !== 'assessed' || !evidenceGraph.claims.length ||
+      evidenceGraph.claims.some((c) => c.status !== 'corroborated');
+    if (incomplete) {
+      if (level === 'high') level = 'medium';
+      reasons.push('Claim verification is incomplete, single-sourced, or contested; source quality alone cannot establish support.');
+    }
+  }
+  const assessedClaims = claims.map((c) => {
+    const assessed = assessClaim(c, byId, conflicts);
+    if (!evidenceGraph || assessed.type === 'judgment') return assessed;
+    // Exact match only: lexical similarity is not entailment. Unmatched writer claims
+    // must not inherit verification merely because they cite a real source.
+    const key = (text) => String(text).trim().toLowerCase().replace(/\s+/g, ' ');
+    const verified = evidenceGraph.claims.find((v) => key(v.text) === key(c.text));
+    const supporting = verified?.edges.filter((e) => e.relation === 'supports' && assessed.sources.includes(e.sourceId)) ?? [];
+    assessed.supported = supporting.length > 0;
+    assessed.conflicted = verified?.status === 'contested' || verified?.status === 'contradicted';
+    assessed.verification = verified?.status ?? 'unverified';
+    assessed.confidence = !assessed.supported || assessed.conflicted ? 'low'
+      : verified.status === 'corroborated' && supporting.length >= 2 ? 'high' : 'medium';
+    return assessed;
+  });
+
+  if (evidenceGraph && level === 'high' && assessedClaims.some((c) => c.type === 'fact' && !c.supported)) {
+    level = 'medium';
+    reasons.push('Some factual claims in the written answer lack verified supporting passages.');
+  }
 
   return {
     confidence: level,
