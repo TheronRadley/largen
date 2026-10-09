@@ -3,7 +3,7 @@
  *
  *   Understand → Plan queries → Search (parallel, cached) → Select & read pages (parallel, cached)
  *   → Extract relevant passages → Score sources → Deduplicate syndicated copies
- *   → Detect contradictions → Evidence matrix → Synthesize → Format citations
+ *   → Verify claims → Detect contradictions → Evidence matrix → Synthesize → Format citations
  *
  * Every external dependency (LLM, search, page fetch) is injected, so the whole flow can be
  * tested with mocks and no API calls. Failures in one search or one page never abort the run.
@@ -15,6 +15,7 @@ import { classifySourceHost } from '../sources/domains.js';
 import { scoreSource } from '../sources/score.js';
 import { dedupeResults, markSyndicated } from '../sources/dedupe.js';
 import { detectConflicts } from '../evidence/contradictions.js';
+import { verifyClaims, unavailableGraph, claimConflicts } from '../evidence/claims.js';
 import { assessEvidence } from '../evidence/matrix.js';
 import { understandQuestion } from './understand.js';
 import { generateQueries, queryLimit } from './plan.js';
@@ -187,7 +188,17 @@ export class ResearchPipeline {
     markSyndicated(sources);
     const pageSources = sources.filter((s) => s.evidenceLevel === 'page' && !s.syndicatedFrom);
     const conflicts = detectConflicts({ sources: pageSources, queryTerms: terms });
-    const assessment = assessEvidence({ sources, conflicts, requiresCurrent: plan.requiresCurrent, now: this.now() });
+    const evidenceGraph = this.now() >= deadline
+      ? unavailableGraph('research_deadline')
+      : await verifyClaims({ llm: this.llm, question: plan.standaloneQuestion, plan, sources, config: this.config, logger: log });
+    checkAbort();
+    conflicts.push(...claimConflicts(evidenceGraph));
+    if (evidenceGraph.status === 'unavailable') {
+      warnings.push('Claim-level verification was unavailable; source scores and citations do not establish factual support.');
+    } else if (evidenceGraph.rejectedEdges) {
+      warnings.push('Some claim evidence was discarded because it could not be grounded in the retrieved passages.');
+    }
+    const assessment = assessEvidence({ sources, conflicts, evidenceGraph, requiresCurrent: plan.requiresCurrent, now: this.now() });
     log.info('Evidence assessed', { sources: sources.length, readable: assessment.counts.readable, independent: assessment.counts.independent, conflicts: conflicts.length, confidence: assessment.confidence });
     checkAbort();
 
@@ -206,6 +217,7 @@ export class ResearchPipeline {
             question,
             plan,
             assessment,
+            evidenceGraph,
             conflicts,
             sources,
             history,
@@ -226,10 +238,11 @@ export class ResearchPipeline {
       conflicts,
       requiresCurrent: plan.requiresCurrent,
       claims: written.claims,
+      evidenceGraph,
       now: this.now(),
     });
     if (finalAssessment.unsupportedClaims > 0) {
-      warnings.push(`${finalAssessment.unsupportedClaims} statement${finalAssessment.unsupportedClaims === 1 ? '' : 's'} in the answer could not be linked to a retrieved source.`);
+      warnings.push(`${finalAssessment.unsupportedClaims} statement${finalAssessment.unsupportedClaims === 1 ? '' : 's'} in the answer could not be verified against supporting retrieved passages.`);
     }
 
     const formatted = formatAnswer({ markdown: written.answer, claims: finalAssessment.claims, sources });
@@ -247,6 +260,7 @@ export class ResearchPipeline {
       references: formatted.references,
       otherSources: formatted.unreferenced,
       claims: formatted.claims,
+      evidenceGraph,
       confidence: finalAssessment.confidence,
       confidenceReasons: finalAssessment.confidenceReasons,
       conflicts: conflicts.map((c) => ({

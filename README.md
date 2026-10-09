@@ -1,5 +1,7 @@
 # Largen
 
+**The AI that finds evidence before it answers.**
+
 Largen is a research assistant. You ask a question, and it:
 
 1. **Understands** the question (is it simple, does it need current web sources, what aspects matter?).
@@ -8,7 +10,7 @@ Largen is a research assistant. You ask a question, and it:
 4. **Reads** the most promising pages and pulls out the relevant passages.
 5. **Scores** each source on authority, relevance, recency, evidence, and transparency.
 6. **Removes syndicated copies** (the same article republished on other sites).
-7. **Detects contradictions**, such as one source saying 14 hours of battery life and another saying 18.
+7. **Extracts and compares claims** with quote-grounded support, contradiction, and irrelevance edges, alongside numeric contradiction detection.
 8. **Builds an evidence matrix** and gives the answer a **High / Medium / Low** confidence rating.
 9. **Writes the answer** in Markdown with numbered citations like `[1]`, followed by a **Sources** section.
 
@@ -188,7 +190,7 @@ src/
   retrieval/             SSRF-safe URL checks, page fetching (byte cap, redirect checks),
                          HTML extraction, passage selection
   sources/               domain classification, five-part source scoring, syndication dedupe
-  evidence/              numeric contradiction detection, evidence matrix and confidence
+  evidence/              claim verification graph, numeric conflicts, evidence matrix and confidence
   orchestrator/          understand.js, plan.js, pipeline.js (the research flow)
   synthesis/             prompts, answer writing (AI or extractive fallback)
   citations/format.js    citation renumbering and the Sources list
@@ -271,7 +273,7 @@ Each provider is one small module with a fixed interface.
 - **No accounts or login** (see Security notes). Anyone who can reach the server can spend your API quota.
 - **Single process, in-memory state.** Caches and rate limits reset on restart and are not shared between multiple server instances. The JSON-file store suits one user or a small team, not heavy multi-user traffic.
 - **Pages that need JavaScript** (many news sites and web apps) return little or no text and are skipped. PDFs and images are not read.
-- **Contradiction detection is a heuristic.** It finds conflicting numbers with the same unit and similar subject. It does not reliably catch disagreements in wording. Confidence ratings are deterministic rules, not a statistical measure of truth.
+- **Contradiction detection is fallible.** Numeric heuristics are supplemented by model-assessed semantic comparisons with validated quotes. Neither guarantees correct interpretation or complete coverage. Confidence ratings are deterministic rules, not a statistical measure of truth.
 - **Authority and recency scores come from rules.** Domain lists in `src/sources/domains.js` are a starting point, not a complete ranking.
 - **DNS rebinding.** The address check happens before fetching, but a hostile DNS server could still point a public name to a private address during the request. Run Largen in a network that blocks private destinations for full protection.
 - **Real providers are not exercised in the automated tests.** The tests use mocks and local fake servers. The OpenAI-compatible, Brave, and SearXNG adapters follow their documented APIs but should be checked with a real key before you rely on them.
@@ -280,14 +282,58 @@ Each provider is one small module with a fixed interface.
 
 ## Next steps
 
-- Add user accounts and per-user conversation storage.
-- Stream the answer token by token.
-- Read PDFs, and use a headless browser for JavaScript-heavy pages (optional, behind a flag).
-- Add an LLM-based check for contradictions in wording, not only in numbers.
-- Let users pick sources, or remove one and re-run the answer.
-- Export answers as Markdown or PDF.
-- Move conversations to SQLite once there are many users.
+1. Evaluate and improve claim entailment and semantic contradiction accuracy.
+2. Improve query planning around missing facets and unresolved evidence.
+3. Add bounded PDF/document retrieval.
+4. Add dynamic research stopping and targeted follow-up searches within hard budgets.
+5. Strengthen primary-source and editorial-independence detection.
+
+Accounts, streaming, exports, and storage changes are secondary to the evidence engine.
 
 ## License
 
 Not yet specified. Add a `LICENSE` file before publishing.
+
+
+## Claim-level evidence verification
+
+Between retrieval and writing, Largen makes one additional cloud-model call to extract
+up to 12 atomic claims and compare their scope against the retrieved excerpts. It handles
+wording disagreements, not only differing numbers. The analyst is instructed to distinguish
+real contradictions from differences in time, jurisdiction, population, and conditions
+(for example, a general prohibition can coexist with a conditional exception).
+
+The API's additive `evidenceGraph` field exposes:
+
+- `status`: `assessed` or `unavailable` (with a machine-readable reason).
+- `method`: `model_assessed_quote_grounded` for completed assessments.
+- `sources`: IDs of the passages actually sent to the verifier.
+- `claims`: claim IDs, precise text, status, supporting-domain count, and evidence edges.
+- Each edge contains a source ID, `supports` / `contradicts` / `irrelevant`, an exact
+  passage quote, and the model's explanation.
+- Claim status is `corroborated`, `single_source`, `contested`, `contradicted`, or
+  `unverified`. Contested claims also appear in the existing conflicts response.
+
+Unknown IDs, invented quotes, malformed edges, snippets, and syndicated copies cannot
+establish graph support. Quotes must occur within the actual excerpt supplied to the
+analyst (whitespace normalized). Same-domain sources count once for corroboration.
+Input uses the existing evidence/passages character budgets, at most 12 sources, and a
+3,500-token output cap. No dependency, database, or local model is added.
+
+The writer receives the graph and must preserve qualifications and disagreements.
+Returned factual claims are linked by exact normalized wording, never fuzzy similarity;
+an unmatched writer claim remains unverified even if its citation exists. Factual claims
+expose `verification`, `supported`, `confidence`, and `conflicted` fields. `supported`
+means a cited supporting edge exists, **not** that a contested claim is true. Missing or
+incomplete verification prevents a high overall confidence rating. Provider failures,
+malformed output, no readable pages, or a deadline reached before verification degrade
+explicitly rather than aborting the research.
+
+**Limits:** Quote matching establishes provenance, not entailment or truth. Semantic
+relations still depend on the cloud model and can be wrong; this is not an independent
+fact-checker. Domain diversity does not guarantee editorial independence. Verification
+covers selected excerpts and extracted claims, not every sentence in the answer, and
+exact wording matching intentionally leaves paraphrases unverified. Current confidence
+remains partly heuristic. Live-provider accuracy needs evaluation; automated tests use
+scripted model outputs. PDF retrieval, dynamic stopping, and automatic follow-up searches
+remain future work.
